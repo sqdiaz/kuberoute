@@ -49,6 +49,10 @@ type KVServer struct {
 }
 
 func NewKVServer(opts Options) *KVServer {
+	logger := opts.Logger
+	if logger == nil {
+		logger = log.Default()
+	}
 	return &KVServer{
 		primary:                  opts.Primary,
 		secondary:                opts.Secondary,
@@ -59,7 +63,7 @@ func NewKVServer(opts Options) *KVServer {
 		replicationBaseBackoff:   opts.ReplicationBaseBackoff,
 		replicationMaxBackoff:    opts.ReplicationMaxBackoff,
 		replicationArtificialLag: opts.ReplicationArtificialLag,
-		logger:                   opts.Logger,
+		logger:                   logger,
 	}
 }
 
@@ -116,6 +120,7 @@ func (s *KVServer) Put(ctx context.Context, req *etcdserverpb.PutRequest) (*etcd
 		"x-kuberoute-staleness-ms", "0",
 		"x-kuberoute-replication", replicationStatus,
 	))
+	s.logger.Printf("put key=%q mode=%s source=primary replication=%s", string(req.Key), mode, replicationStatus)
 
 	return &etcdserverpb.PutResponse{
 		Header: header,
@@ -136,6 +141,7 @@ func (s *KVServer) Range(ctx context.Context, req *etcdserverpb.RangeRequest) (*
 					"x-kuberoute-staleness-ms", fmt.Sprintf("%d", staleness.Milliseconds()),
 					"x-kuberoute-replication", "n/a",
 				))
+				s.logger.Printf("range key=%q mode=%s source=cache staleness_ms=%d", string(req.Key), mode, staleness.Milliseconds())
 				return &etcdserverpb.RangeResponse{
 					Header: &etcdserverpb.ResponseHeader{
 						Revision: entry.ModRevision,
@@ -215,6 +221,7 @@ func (s *KVServer) Range(ctx context.Context, req *etcdserverpb.RangeRequest) (*
 		"x-kuberoute-staleness-ms", "0",
 		"x-kuberoute-replication", "n/a",
 	))
+	s.logger.Printf("range key=%q mode=%s source=primary count=%d", string(req.Key), mode, resp.Count)
 
 	return &etcdserverpb.RangeResponse{
 		Header: copyHeader(resp.Header),
@@ -267,6 +274,7 @@ func (s *KVServer) DeleteRange(ctx context.Context, req *etcdserverpb.DeleteRang
 		"x-kuberoute-staleness-ms", "0",
 		"x-kuberoute-replication", replicationStatus,
 	))
+	s.logger.Printf("delete key=%q mode=%s source=primary deleted=%d replication=%s", string(req.Key), mode, resp.Deleted, replicationStatus)
 
 	return &etcdserverpb.DeleteRangeResponse{
 		Header:  copyHeader(resp.Header),

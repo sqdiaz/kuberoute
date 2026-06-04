@@ -24,6 +24,7 @@ KubeRoute is a Go gRPC gateway that exposes a **subset** of etcd KV API and rout
 - Not a drop-in etcd replacement.
 - Not full etcd API compatibility.
 - `Txn` and `Compact` return `Unimplemented`.
+- etcd maintenance RPCs (for example `etcdctl endpoint health`) are not implemented by this MVP gateway.
 - No exactly-once replication guarantee; replication is at-least-once.
 - Revisions across primary/secondary are not guaranteed to match.
 - In `/eventual/*`, primary write success is returned even if replication enqueue is degraded; check `x-kuberoute-replication`.
@@ -38,15 +39,29 @@ KubeRoute is a Go gRPC gateway that exposes a **subset** of etcd KV API and rout
 
 ## Quickstart
 
-1. Start two local etcd instances:
+1. Start two local etcd instances (different **client ports**, **peer ports**, and **data dirs**):
 
 ```bash
 brew install etcd
-etcd --listen-client-urls=http://127.0.0.1:2379 --advertise-client-urls=http://127.0.0.1:2379
+etcd \
+  --name etcd1 \
+  --data-dir /tmp/etcd1 \
+  --listen-client-urls=http://127.0.0.1:2379 \
+  --advertise-client-urls=http://127.0.0.1:2379 \
+  --listen-peer-urls=http://127.0.0.1:2380 \
+  --initial-advertise-peer-urls=http://127.0.0.1:2380 \
+  --initial-cluster=etcd1=http://127.0.0.1:2380
 ```
 
 ```bash
-etcd --listen-client-urls=http://127.0.0.1:3379 --advertise-client-urls=http://127.0.0.1:3379
+etcd \
+  --name etcd2 \
+  --data-dir /tmp/etcd2 \
+  --listen-client-urls=http://127.0.0.1:3379 \
+  --advertise-client-urls=http://127.0.0.1:3379 \
+  --listen-peer-urls=http://127.0.0.1:3380 \
+  --initial-advertise-peer-urls=http://127.0.0.1:3380 \
+  --initial-cluster=etcd2=http://127.0.0.1:3380
 ```
 
 2. Run KubeRoute:
@@ -62,11 +77,31 @@ go run ./cmd/kuberoute \
 3. Issue etcdctl requests against KubeRoute:
 
 ```bash
-ETCDCTL_API=3 etcdctl --endpoints=127.0.0.1:22379 put /eventual/demo hello
-ETCDCTL_API=3 etcdctl --endpoints=127.0.0.1:22379 get /eventual/demo
-ETCDCTL_API=3 etcdctl --endpoints=127.0.0.1:22379 put /bounded/demo world
-ETCDCTL_API=3 etcdctl --endpoints=127.0.0.1:22379 get /bounded/demo
+etcdctl --endpoints=http://127.0.0.1:22379 --dial-timeout=3s --command-timeout=5s put /eventual/demo hello
+etcdctl --endpoints=http://127.0.0.1:22379 --dial-timeout=3s --command-timeout=5s get /eventual/demo
+etcdctl --endpoints=http://127.0.0.1:22379 --dial-timeout=3s --command-timeout=5s put /bounded/demo world
+etcdctl --endpoints=http://127.0.0.1:22379 --dial-timeout=3s --command-timeout=5s get /bounded/demo
 ```
+
+4. Verify placement behavior:
+
+```bash
+# /bounded/* writes go to primary (2379)
+etcdctl --endpoints=http://127.0.0.1:2379 get /bounded/demo
+
+# /eventual/* writes are replicated to secondary (3379)
+etcdctl --endpoints=http://127.0.0.1:3379 get /eventual/demo
+```
+
+Expected:
+
+- `/bounded/demo` is present on `2379`.
+- `/eventual/demo` eventually appears on `3379` (after replication delay, if configured).
+
+Notes:
+
+- `etcdctl endpoint health` is expected to fail against KubeRoute in this MVP.
+- KubeRoute emits per-request logs for `Put`, `Range`, and `DeleteRange`; if a request reaches KubeRoute you should see a corresponding log line.
 
 ## Development
 
