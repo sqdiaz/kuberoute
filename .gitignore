@@ -1,0 +1,3 @@
+kuberoute
+*.db
+*.db-lock
