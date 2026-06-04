@@ -1,8 +1,6 @@
-# KubeRoute (MVP)
+# KubeRoute
 
 KubeRoute is a Go gRPC gateway that exposes a **subset** of etcd KV API and routes requests by key policy with explicit consistency modes.
-
-## What this MVP implements
 
 - etcd KV gRPC methods:
   - `Put`
@@ -19,12 +17,12 @@ KubeRoute is a Go gRPC gateway that exposes a **subset** of etcd KV API and rout
   - `x-kuberoute-staleness-ms`
   - `x-kuberoute-replication` (`n/a`, `queued`, `degraded`)
 
-## Explicit limitations (MVP honesty)
+## Limitations
 
 - Not a drop-in etcd replacement.
 - Not full etcd API compatibility.
 - `Txn` and `Compact` return `Unimplemented`.
-- etcd maintenance RPCs (for example `etcdctl endpoint health`) are not implemented by this MVP gateway.
+- etcd maintenance RPCs (for example `etcdctl endpoint health`) are not implemented.
 - No exactly-once replication guarantee; replication is at-least-once.
 - Revisions across primary/secondary are not guaranteed to match.
 - In `/eventual/*`, primary write success is returned even if replication enqueue is degraded; check `x-kuberoute-replication`.
@@ -100,7 +98,7 @@ Expected:
 
 Notes:
 
-- `etcdctl endpoint health` is expected to fail against KubeRoute in this MVP.
+- `etcdctl endpoint health` is expected to fail against KubeRoute.
 - KubeRoute emits per-request logs for `Put`, `Range`, and `DeleteRange`; if a request reaches KubeRoute you should see a corresponding log line.
 
 ## Development
